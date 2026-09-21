@@ -1,0 +1,8 @@
+backup/
+*.archive
+*.archive.gz
+*.archive.gz.enc
+aes_key.txt
+.env
+__pycache__/
+*.pyc
