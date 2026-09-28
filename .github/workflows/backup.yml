@@ -1,25 +1,38 @@
-name: MongoDB Automated Backup
+name: Provincial Database DR Backup
 
 on:
-  workflow_dispatch:
-
   schedule:
     - cron: "*/5 * * * *"
 
+  workflow_dispatch:
+
 jobs:
   backup:
+<<<<<<< HEAD
     runs-on: ubuntu-24.04
+=======
+    runs-on: ubuntu-latest
+>>>>>>> 760d449 (Fix S3 backup region)
 
     steps:
-
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
+<<<<<<< HEAD
       - name: Setup Python
+=======
+      - name: Install PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client openssl gzip
+
+      - name: Install Python
+>>>>>>> 760d449 (Fix S3 backup region)
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
+<<<<<<< HEAD
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
@@ -57,9 +70,24 @@ jobs:
 
           S3_BUCKET: my-data-demo-2026-20055-dr
 
+=======
+      - name: Install boto3
+        run: pip install boto3
+
+      - name: Run Backup
+        env:
+          DB_HOST: ${{ secrets.PRIMARY_PROVINCIAL_DB_HOST }}
+          DB_USER: ${{ secrets.PRIMARY_DB_USER }}
+          DB_PASSWORD: ${{ secrets.PRIMARY_DB_PASSWORD }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.AES256_ENCRYPTION_KEY }}
+          S3_DR_BACKUP_BUCKET: ${{ secrets.AWS_S3_DR_BUCKET }}
+          AWS_REGION: ap-southeast-2
+>>>>>>> 760d449 (Fix S3 backup region)
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-southeast-2
 
+<<<<<<< HEAD
           AWS_REGION: ap-southeast-2
           AWS_DEFAULT_REGION: ap-southeast-2
 
@@ -67,3 +95,6 @@ jobs:
 
         run: |
           python scripts/backup_mongodb.py
+=======
+        run: python scripts/backup_provincial_db.py
+>>>>>>> 760d449 (Fix S3 backup region)

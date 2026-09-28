@@ -1,147 +1,139 @@
 import os
+import subprocess
 import gzip
 import shutil
-import subprocess
-import tempfile
-from datetime import datetime, timezone
-
+from datetime import datetime
 import boto3
 
+print("=" * 50)
+print("MONGODB DISASTER RECOVERY BACKUP")
+print("=" * 50)
 
-MONGODB_URI = os.environ["MONGODB_URI"]
-S3_BUCKET = os.environ["S3_BUCKET"]
-AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-1")
-ENCRYPTION_KEY = os.environ["BACKUP_ENCRYPTION_KEY"]
+# =========================
+# CONFIGURATION
+# =========================
 
-DB_NAME = "cloud_dr"
-S3_PREFIX = "mongodb"
+MONGODB_URI = os.getenv("MONGODB_URI")
+S3_BUCKET = os.getenv("S3_BUCKET", "my-data-demo-2026-20055-dr")
+AWS_REGION = "ap-southeast-2"
+ENCRYPTION_KEY = os.getenv("BACKUP_ENCRYPTION_KEY")
+
+TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 BACKUP_DIR = "backup"
-
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
-timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+ARCHIVE_FILE = f"{BACKUP_DIR}/cloud_dr_{TIMESTAMP}.archive"
+GZIP_FILE = f"{ARCHIVE_FILE}.gz"
+ENCRYPTED_FILE = f"{GZIP_FILE}.enc"
 
-archive_file = os.path.join(
-    BACKUP_DIR,
-    f"cloud_dr_{timestamp}.archive"
+# =========================
+# CHECK CONFIG
+# =========================
+
+if not MONGODB_URI:
+    raise Exception("MONGODB_URI chưa được cấu hình")
+
+if not ENCRYPTION_KEY:
+    raise Exception("BACKUP_ENCRYPTION_KEY chưa được cấu hình")
+
+print(f"[INFO] S3 Bucket: {S3_BUCKET}")
+print(f"[INFO] AWS Region: {AWS_REGION}")
+
+# =========================
+# 1. MONGODB BACKUP
+# =========================
+
+print("[1/4] Dang backup MongoDB...")
+
+subprocess.run([
+    "mongodump",
+    "--uri", MONGODB_URI,
+    "--archive=" + ARCHIVE_FILE
+], check=True)
+
+print("[OK] MongoDB backup thanh cong")
+
+# =========================
+# 2. GZIP
+# =========================
+
+print("[2/4] Dang nen backup...")
+
+with open(ARCHIVE_FILE, "rb") as f_in:
+    with gzip.open(GZIP_FILE, "wb") as f_out:
+        shutil.copyfileobj(f_in, f_out)
+
+os.remove(ARCHIVE_FILE)
+
+print("[OK] Nen gzip thanh cong")
+
+# =========================
+# 3. AES-256
+# =========================
+
+print("[3/4] Dang ma hoa AES-256...")
+
+subprocess.run([
+    "openssl",
+    "enc",
+    "-aes-256-cbc",
+    "-salt",
+    "-pbkdf2",
+    "-in", GZIP_FILE,
+    "-out", ENCRYPTED_FILE,
+    "-pass", f"pass:{ENCRYPTION_KEY}"
+], check=True)
+
+os.remove(GZIP_FILE)
+
+print("[OK] AES-256 encryption thanh cong")
+
+# =========================
+# 4. UPLOAD S3
+# =========================
+
+print("[4/4] Dang upload len Amazon S3...")
+
+# QUAN TRỌNG:
+# Ép boto3 sử dụng region ap-southeast-2
+session = boto3.Session(
+    region_name=AWS_REGION
 )
 
-gzip_file = archive_file + ".gz"
+s3 = session.client(
+    "s3",
+    region_name=AWS_REGION
+)
 
-encrypted_file = gzip_file + ".enc"
+print("[INFO] S3 endpoint:", s3.meta.endpoint_url)
 
+S3_KEY = (
+    f"provincial-center/"
+    f"mongodb/"
+    f"{TIMESTAMP}/"
+    f"{os.path.basename(ENCRYPTED_FILE)}"
+)
 
-print("=" * 60)
-print("MONGODB DISASTER RECOVERY BACKUP")
-print("=" * 60)
+s3.upload_file(
+    ENCRYPTED_FILE,
+    S3_BUCKET,
+    S3_KEY
+)
 
+print("[OK] Upload S3 thanh cong")
 
-try:
+print()
+print("=" * 50)
+print("BACKUP HOAN THANH")
+print("=" * 50)
+print(f"S3: s3://{S3_BUCKET}/{S3_KEY}")
 
-    print("[1/4] Dang backup MongoDB...")
+# =========================
+# CLEANUP
+# =========================
 
-    subprocess.run(
-        [
-            "mongodump",
-            f"--uri={MONGODB_URI}",
-            f"--db={DB_NAME}",
-            f"--archive={archive_file}"
-        ],
-        check=True
-    )
+if os.path.exists(ENCRYPTED_FILE):
+    os.remove(ENCRYPTED_FILE)
 
-    print("[OK] MongoDB backup thanh cong")
-
-
-    print("[2/4] Dang nen backup...")
-
-    with open(archive_file, "rb") as source:
-
-        with gzip.open(gzip_file, "wb") as target:
-
-            shutil.copyfileobj(source, target)
-
-    os.remove(archive_file)
-
-    print("[OK] Nen gzip thanh cong")
-
-
-    print("[3/4] Dang ma hoa AES-256...")
-
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        delete=False,
-        encoding="utf-8"
-    ) as key_file:
-
-        key_file.write(ENCRYPTION_KEY.strip())
-
-        key_file_path = key_file.name
-
-
-    try:
-
-        subprocess.run(
-            [
-                "openssl",
-                "enc",
-                "-aes-256-cbc",
-                "-pbkdf2",
-                "-iter",
-                "100000",
-                "-salt",
-                "-in",
-                gzip_file,
-                "-out",
-                encrypted_file,
-                "-pass",
-                f"file:{key_file_path}"
-            ],
-            check=True
-        )
-
-    finally:
-
-        if os.path.exists(key_file_path):
-            os.remove(key_file_path)
-
-
-    os.remove(gzip_file)
-
-    print("[OK] AES-256 encryption thanh cong")
-
-
-    print("[4/4] Dang upload len Amazon S3...")
-
-    s3 = boto3.client(
-        "s3",
-        region_name=AWS_REGION
-    )
-
-    s3_key = f"{S3_PREFIX}/{os.path.basename(encrypted_file)}"
-
-    s3.upload_file(
-        encrypted_file,
-        S3_BUCKET,
-        s3_key
-    )
-
-    print("[OK] Upload S3 thanh cong")
-
-    print("-" * 60)
-
-    print(f"S3 Bucket : {S3_BUCKET}")
-    print(f"S3 Object : {s3_key}")
-    print(f"Local File: {encrypted_file}")
-
-    print("=" * 60)
-    print("BACKUP HOAN TAT")
-    print("=" * 60)
-
-
-except Exception as error:
-
-    print("[ERROR]", error)
-
-    raise
+print("[OK] Da xoa file tam")
