@@ -5,34 +5,18 @@ import subprocess
 import tempfile
 from datetime import datetime, timezone
 
-import boto3
 
-
-# ==============================
-# CẤU HÌNH TỪ GITHUB SECRETS
-# ==============================
+# ============================================================
+# CẤU HÌNH
+# ============================================================
 
 MONGODB_URI = os.environ["MONGODB_URI"]
-S3_BUCKET = os.environ["S3_BUCKET"]
-AWS_REGION = os.environ["AWS_REGION"]
 ENCRYPTION_KEY = os.environ["BACKUP_ENCRYPTION_KEY"]
 
-
-# ==============================
-# CẤU HÌNH BACKUP
-# ==============================
-
 DB_NAME = "cloud_dr"
-S3_PREFIX = "mongodb"
-
 BACKUP_DIR = "backup"
 
 os.makedirs(BACKUP_DIR, exist_ok=True)
-
-
-# ==============================
-# TẠO TÊN FILE THEO THỜI GIAN
-# ==============================
 
 timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
@@ -46,9 +30,9 @@ gzip_file = archive_file + ".gz"
 encrypted_file = gzip_file + ".enc"
 
 
-# ==============================
+# ============================================================
 # BẮT ĐẦU BACKUP
-# ==============================
+# ============================================================
 
 print("=" * 60)
 print("MONGODB DISASTER RECOVERY BACKUP")
@@ -57,11 +41,11 @@ print("=" * 60)
 
 try:
 
-    # ==========================================
+    # ========================================================
     # BƯỚC 1: BACKUP MONGODB
-    # ==========================================
+    # ========================================================
 
-    print("[1/4] Dang backup MongoDB...")
+    print("[1/3] Dang backup MongoDB...")
 
     subprocess.run(
         [
@@ -76,11 +60,11 @@ try:
     print("[OK] MongoDB backup thanh cong")
 
 
-    # ==========================================
+    # ========================================================
     # BƯỚC 2: NÉN GZIP
-    # ==========================================
+    # ========================================================
 
-    print("[2/4] Dang nen backup...")
+    print("[2/3] Dang nen backup...")
 
     with open(archive_file, "rb") as source:
 
@@ -93,11 +77,11 @@ try:
     print("[OK] Nen gzip thanh cong")
 
 
-    # ==========================================
+    # ========================================================
     # BƯỚC 3: MÃ HÓA AES-256
-    # ==========================================
+    # ========================================================
 
-    print("[3/4] Dang ma hoa AES-256...")
+    print("[3/3] Dang ma hoa AES-256...")
 
     with tempfile.NamedTemporaryFile(
         mode="w",
@@ -142,35 +126,18 @@ try:
     print("[OK] AES-256 encryption thanh cong")
 
 
-    # ==========================================
-    # BƯỚC 4: UPLOAD AMAZON S3
-    # ==========================================
-
-    print("[4/4] Dang upload len Amazon S3...")
-
-    s3 = boto3.client(
-        "s3",
-        region_name=AWS_REGION
-    )
-
-    s3_key = f"{S3_PREFIX}/{os.path.basename(encrypted_file)}"
-
-    s3.upload_file(
-        encrypted_file,
-        S3_BUCKET,
-        s3_key
-    )
-
-    print("[OK] Upload S3 thanh cong")
+    # ========================================================
+    # HOÀN TẤT
+    # ========================================================
 
     print("-" * 60)
 
-    print(f"S3 Bucket : {S3_BUCKET}")
-    print(f"S3 Object : {s3_key}")
-    print(f"Local File: {encrypted_file}")
+    print(f"Encrypted backup: {encrypted_file}")
 
-    print("=" * 60)
+    print("-" * 60)
+
     print("BACKUP HOAN TAT")
+
     print("=" * 60)
 
 
