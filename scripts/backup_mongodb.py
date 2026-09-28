@@ -8,10 +8,19 @@ from datetime import datetime, timezone
 import boto3
 
 
+# ==============================
+# CẤU HÌNH TỪ GITHUB SECRETS
+# ==============================
+
 MONGODB_URI = os.environ["MONGODB_URI"]
 S3_BUCKET = os.environ["S3_BUCKET"]
-AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-1")
+AWS_REGION = os.environ["AWS_REGION"]
 ENCRYPTION_KEY = os.environ["BACKUP_ENCRYPTION_KEY"]
+
+
+# ==============================
+# CẤU HÌNH BACKUP
+# ==============================
 
 DB_NAME = "cloud_dr"
 S3_PREFIX = "mongodb"
@@ -19,6 +28,11 @@ S3_PREFIX = "mongodb"
 BACKUP_DIR = "backup"
 
 os.makedirs(BACKUP_DIR, exist_ok=True)
+
+
+# ==============================
+# TẠO TÊN FILE THEO THỜI GIAN
+# ==============================
 
 timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
@@ -32,12 +46,20 @@ gzip_file = archive_file + ".gz"
 encrypted_file = gzip_file + ".enc"
 
 
+# ==============================
+# BẮT ĐẦU BACKUP
+# ==============================
+
 print("=" * 60)
 print("MONGODB DISASTER RECOVERY BACKUP")
 print("=" * 60)
 
 
 try:
+
+    # ==========================================
+    # BƯỚC 1: BACKUP MONGODB
+    # ==========================================
 
     print("[1/4] Dang backup MongoDB...")
 
@@ -54,6 +76,10 @@ try:
     print("[OK] MongoDB backup thanh cong")
 
 
+    # ==========================================
+    # BƯỚC 2: NÉN GZIP
+    # ==========================================
+
     print("[2/4] Dang nen backup...")
 
     with open(archive_file, "rb") as source:
@@ -66,6 +92,10 @@ try:
 
     print("[OK] Nen gzip thanh cong")
 
+
+    # ==========================================
+    # BƯỚC 3: MÃ HÓA AES-256
+    # ==========================================
 
     print("[3/4] Dang ma hoa AES-256...")
 
@@ -111,6 +141,10 @@ try:
 
     print("[OK] AES-256 encryption thanh cong")
 
+
+    # ==========================================
+    # BƯỚC 4: UPLOAD AMAZON S3
+    # ==========================================
 
     print("[4/4] Dang upload len Amazon S3...")
 
