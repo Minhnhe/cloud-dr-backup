@@ -7,9 +7,7 @@ on:
     - cron: "*/5 * * * *"
 
 jobs:
-
   backup:
-
     runs-on: ubuntu-24.04
 
     steps:
@@ -17,61 +15,55 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-
       - name: Setup Python
         uses: actions/setup-python@v5
-
         with:
           python-version: "3.12"
 
-
       - name: Install Python dependencies
         run: |
-
           python -m pip install --upgrade pip
-
           pip install -r requirements.txt
-
 
       - name: Install OpenSSL
         run: |
-
           sudo apt-get update
-
-          sudo apt-get install -y openssl
-
+          sudo apt-get install -y openssl gzip
 
       - name: Install MongoDB Database Tools
         run: |
-
           wget -q https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2404-x86_64-100.18.0.deb
-
           sudo dpkg -i mongodb-database-tools-ubuntu2404-x86_64-100.18.0.deb
-
 
       - name: Verify MongoDB tools
         run: |
-
           mongodump --version
-
           openssl version
+          gzip --version
 
+      - name: Verify AWS configuration
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ap-southeast-2
+          AWS_DEFAULT_REGION: ap-southeast-2
+        run: |
+          python -c "import boto3; print('AWS Region:', boto3.Session().region_name)"
+          python -c "import boto3; print('S3:', boto3.client('s3').meta.endpoint_url)"
 
       - name: Run MongoDB backup
         env:
-
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
 
-          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_BUCKET: my-data-demo-2026-20055-dr
 
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_REGION: ap-southeast-2
+          AWS_DEFAULT_REGION: ap-southeast-2
 
           BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
 
         run: |
-
           python scripts/backup_mongodb.py
