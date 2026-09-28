@@ -53,7 +53,7 @@ jobs:
       - name: Run MongoDB backup
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          S3_BUCKET: my-data-demo-2026-20055-dr
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: ap-southeast-2
