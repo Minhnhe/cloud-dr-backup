@@ -3,81 +3,65 @@
 set -e
 
 echo "=========================================="
-echo "     PROVINCIAL DATABASE DR DRILL"
+echo "     MONGODB DISASTER RECOVERY RESTORE"
 echo "=========================================="
 
-DATABASES=(
-"CSDL_A_Dancu"
-"CSDL_B_Dichvucong"
-"CSDL_C_Datdai"
-)
+S3_BUCKET="my-data-demo-2026-20055-dr"
+AWS_REGION="ap-southeast-2"
 
-RESTORE_TIMESTAMP="${RESTORE_TIMESTAMP:-20260921_090000}"
+mkdir -p restore
 
-S3_BUCKET="${S3_DR_BACKUP_BUCKET}"
-DR_HOST="${DR_STANDBY_DB_HOST}"
-DB_USER="${DB_USER}"
+echo "[1/5] Tim backup moi nhat tren S3..."
 
-WORK_DIR="/tmp/dr_restore"
+BACKUP_FILE=$(aws s3api list-objects-v2 \
+  --bucket "$S3_BUCKET" \
+  --prefix "provincial-center/mongodb/" \
+  --region "$AWS_REGION" \
+  --query 'sort_by(Contents, &LastModified)[-1].Key' \
+  --output text)
 
-mkdir -p "$WORK_DIR"
+if [ "$BACKUP_FILE" = "None" ] || [ -z "$BACKUP_FILE" ]; then
+    echo "[ERROR] Khong tim thay backup tren S3!"
+    exit 1
+fi
 
-START_TIME=$(date +%s)
+echo "[OK] Backup: $BACKUP_FILE"
 
-echo "[ALERT] Primary Database outage simulated"
-echo "[DR] Starting restore from AWS S3..."
+echo "[2/5] Tai backup tu S3..."
 
-for db in "${DATABASES[@]}"; do
+aws s3 cp \
+  "s3://$S3_BUCKET/$BACKUP_FILE" \
+  restore/backup.archive.gz.enc \
+  --region "$AWS_REGION"
 
-    FILE="${db}_${RESTORE_TIMESTAMP}.sql.gz.enc"
+echo "[OK] Download thanh cong"
 
-    S3_KEY="provincial-center/${db}/${RESTORE_TIMESTAMP}/${FILE}"
+echo "[3/5] Giai ma AES-256..."
 
-    ENC_FILE="${WORK_DIR}/${FILE}"
-    GZ_FILE="${WORK_DIR}/${db}.sql.gz"
+openssl enc -d \
+  -aes-256-cbc \
+  -pbkdf2 \
+  -in restore/backup.archive.gz.enc \
+  -out restore/backup.archive.gz \
+  -pass pass:"$BACKUP_ENCRYPTION_KEY"
 
-    echo ""
-    echo "[DR] Database: $db"
+echo "[OK] Giai ma thanh cong"
 
-    echo "[S3] Downloading encrypted backup..."
+echo "[4/5] Giai nen backup..."
 
-    aws s3 cp \
-        "s3://${S3_BUCKET}/${S3_KEY}" \
-        "$ENC_FILE"
+gunzip -f restore/backup.archive.gz
 
-    echo "[AES-256] Decrypting..."
+echo "[OK] Giai nen thanh cong"
 
-    openssl enc \
-        -d \
-        -aes-256-cbc \
-        -pbkdf2 \
-        -in "$ENC_FILE" \
-        -out "$GZ_FILE" \
-        -pass "pass:${BACKUP_ENCRYPTION_KEY}"
+echo "[5/5] Khoi phuc MongoDB..."
 
-    echo "[DATABASE] Restoring..."
+mongorestore \
+  --uri="$MONGODB_URI" \
+  --archive=restore/backup.archive \
+  --drop
 
-    gunzip -c "$GZ_FILE" | \
-        PGPASSWORD="$DB_PASSWORD" \
-        psql \
-        -h "$DR_HOST" \
-        -U "$DB_USER" \
-        -d "$db"
+echo "[OK] Khoi phuc MongoDB thanh cong"
 
-    echo "[SUCCESS] $db restored"
-
-done
-
-END_TIME=$(date +%s)
-
-RTO=$((END_TIME - START_TIME))
-
-echo ""
 echo "=========================================="
-echo "DR RESTORE COMPLETED"
-echo "RTO: ${RTO} seconds"
+echo "       DR RESTORE HOAN TAT"
 echo "=========================================="
-
-if [ "$RTO" -lt 900 ]; then
-    echo "[PASS] RTO < 15 minutes"
-else
